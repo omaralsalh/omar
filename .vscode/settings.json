@@ -1,0 +1,18 @@
+{
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "deepscan.enable": true,
+  "cSpell.words": [
+    "clsx",
+    "Editorinterface",
+    "editorserver",
+    "nextui",
+    "partykit",
+    "partysocket",
+    "quillnext",
+    "quillrea",
+    "roominfo",
+    "roomserver",
+    "userlogin",
+    "ytext"
+  ]
+}

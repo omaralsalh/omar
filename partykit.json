@@ -1,0 +1,11 @@
+{
+  "$schema": "https://www.partykit.io/schema.json",
+  "name": "next-pages-template-party",
+  "main": "party/main.ts",
+  "compatibilityDate": "2024-06-20",
+  "parties": {
+    "editorserver":"party/editorserver.ts",
+    "roomserver":"party/roomserver.ts"
+  }
+  
+}
