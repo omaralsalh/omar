@@ -1,15 +1,17 @@
 "use client";
 import { useState } from "react";
 import usePartySocket from "partysocket/react";
-
+import MessageInput from "@/components/AiFeatures/AiFeature";
 import { Rooms, SINGLETON_ROOM_ID } from "@/party/types";
 
 export default function Lobby({
   currentRoom,
   setCurrentRoom,
+  copiedText,
 }: Readonly<{
   currentRoom: string;
   setCurrentRoom: (room: string) => void;
+  copiedText: string;
 }>) {
   const [rooms, setRooms] = useState<Rooms>({});
 
@@ -28,31 +30,7 @@ export default function Lobby({
   return (
     <div>
       <h3>All Rooms</h3>
-      <ul>
-        {Object.entries(rooms).map(([room, count]) => {
-          const isCurrent = room === currentRoom;
-
-          return (
-            <li key={room}>
-              <button disabled={isCurrent} onClick={() => setCurrentRoom(room)}>
-                Room #{room}
-              </button>
-              <span>
-                Present <span>{count}</span>
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-      {
-        <button
-          onClick={() =>
-            setCurrentRoom(Math.random().toString(36).substring(2, 8))
-          }
-        >
-          New Room
-        </button>
-      }
+      <MessageInput copiedText={copiedText} />
     </div>
   );
 }

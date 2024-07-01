@@ -12,6 +12,8 @@ function getRandomColor() {
 
 export default function EditorPage() {
   const [currentRoom, setCurrentRoom] = useState("default");
+  const [comments, setComments] = useState([]);
+  const [copiedText, setCopiedText] = useState("");
   const userColor = useMemo(() => getRandomColor(), []);
   const Editor = useMemo(() => {
     return dynamic(() => import("@/components/EditorComponent/Editor"), {
@@ -28,10 +30,19 @@ export default function EditorPage() {
         </Card>
 
         <Card style={{ width: "60%", padding: "20px" }}>
-          <Editor key={currentRoom} room={currentRoom} userColor={userColor} />
+          <Editor
+            key={currentRoom}
+            room={currentRoom}
+            userColor={userColor}
+            onCopy={setCopiedText}
+          />
         </Card>
         <Card style={{ width: "20%", padding: "10px" }}>
-          <Lobby currentRoom={currentRoom} setCurrentRoom={setCurrentRoom} />
+          <Lobby
+            currentRoom={currentRoom}
+            setCurrentRoom={setCurrentRoom}
+            copiedText={copiedText}
+          />
         </Card>
       </div>
     </>
