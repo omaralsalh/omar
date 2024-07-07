@@ -1,173 +1,256 @@
-// pages/components/Editor.tsx
-
-import React, { useState, useEffect, useRef, ChangeEvent } from "react";
+"use client";
+import { useState, useRef, useEffect } from "react";
 import ReactQuill, { Quill } from "react-quill";
+import { QuillBinding } from "y-quill";
+import useYProvider from "y-partykit/react";
 import "react-quill/dist/quill.snow.css";
-// import "../styles.css";
-import { Button, Card, Textarea, Text, Row, Spacer } from "@nextui-org/react";
+import QuillCursors from "quill-cursors";
+import * as Y from "yjs";
+import IconButton from "@mui/material/IconButton";
+import CloseIcon from '@mui/icons-material/Close';
+import React from "react";
 
-interface EditorProps {
-  addComment: (name: string, content: string, date: string, id: number) => void;
-  onCopy: (text: string) => void;
+import { SINGLETON_ROOM_ID } from "@/party/types";
+
+interface Range{
+  index: number,
+  length: number
 }
 
-const Editor: React.FC<EditorProps> = ({ addComment, onCopy }) => {
-  const [selectedRange, setSelectedRange] = useState<
-    [number | null, number | null]
-  >([null, null]);
-  const [buttonPosition, setButtonPosition] = useState({ top: 0, left: 0 });
-  const [textareaPosition, setTextareaPosition] = useState({ top: 0, left: 0 });
+interface Position{
+  top: number;
+  left: number;
+}
+
+
+Quill.register("modules/cursors", QuillCursors);
+
+export default function Editor({
+  room,
+  userColor,
+  setTextSpecificComment,
+  setEditor
+}: Readonly<{
+  room: string;
+  userColor: string;
+  setTextSpecificComment: Function;
+  setEditor: Function;
+}>) {
+  const ydoc = new Y.Doc();
+
+  const [text, setText] = useState("");
+  const [selectedRange, setSelectedRange] = useState<Range|null>();
+  const [buttonPosition, setButtonPosition] = useState<Position>();
   const [showButton, setShowButton] = useState(false);
+  const [textareaPosition, setTextareaPosition] = useState<Position>();
   const [showTextarea, setShowTextarea] = useState(false);
-  const [content, setContent] = useState("");
-  const editorRef = useRef<ReactQuill | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  let quill = useRef<Quill | null>(null);
+  const [selectedText, setSelectedText] = useState("");
+  const [commentContent, setCommentContent] = useState("");
+
+  const textareaRef: React.RefObject<HTMLTextAreaElement> = React.createRef();
+  const quill = useRef<ReactQuill>(null);
+  
+  const provider = useYProvider({
+    host: "localhost:1999", // optional, defaults to window.location.host
+    party: "editorserver",
+    room: SINGLETON_ROOM_ID,
+    doc: ydoc,
+  });
 
   useEffect(() => {
-    if (editorRef.current) {
-      quill.current = editorRef.current.getEditor();
-      quill.current.on("selection-change", handleSelectionChange);
-
-      quill.current.insertText(0, "Lorem ipsum\n", {
-        bold: true,
-        italic: true,
-        color: "red",
-        size: "large",
-      });
-      quill.current.insertText(
-        12,
-        "\nLorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet."
-      );
-    }
-
-    return () => {
-      if (quill.current) {
-        quill.current.off("selection-change", handleSelectionChange);
+    const fetchInitialText = async () => {
+      try {
+        console.log(`Fetching initial text for room: ${room}`);
+        const response = await fetch(`/api/getInitialText?room=${room}`);
+        const data = await response.json();
+        if (response.ok) {
+          const ytext = provider.doc.getText("quill");
+          ytext.delete(0, ytext.length); // Clear existing content
+          ytext.insert(0, data.text); // Insert fetched text
+          setText(data.text); // Update local state
+          console.log(data.text)
+        } else {
+          console.error("Failed to fetch initial text:", data.error);
+        }
+      } catch (error) {
+        console.error("Failed to fetch initial text:", error);
       }
     };
-  }, []);
 
-  const handleSelectionChange = (range: any) => {
-    if (range && range.length > 0) {
-      const selection = quill.current?.getSelection();
-      setSelectedRange([selection?.index ?? null, selection?.length ?? null]);
+    fetchInitialText();
+  }, [room, provider]);
 
-      const editorRect = editorRef.current
-        ?.getEditor()
-        .root.getBoundingClientRect();
-      const bounds = quill.current?.getBounds(
-        selection?.index ?? 0,
-        selection?.length ?? 0
-      );
-      setButtonPosition({
-        top: (editorRect?.top ?? 0) + (bounds?.top ?? 0) - 40,
-        left:
-          (editorRect?.left ?? 0) +
-          (bounds?.left ?? 0) +
-          (bounds?.width ?? 0) / 2,
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const ytext = provider.doc.getText("quill");
+
+      const editor = quill.current!.getEditor();
+      if (quill.current) {
+        setEditor(quill.current);
+      }      
+      editor.on("selection-change", handleSelectionChange);
+      const binding = new QuillBinding(ytext, editor, provider.awareness);
+
+      provider.awareness.setLocalStateField("user", {
+        name: "Typing...",
+        color: userColor,
       });
-      setShowButton(true);
 
-      const selectedText = quill.current?.getText(
-        selection?.index ?? 0,
-        selection?.length ?? 0
-      );
-      if (selectedText) {
-        onCopy(selectedText);
-      }
-    } else {
-      setShowButton(false);
+      return () => {
+        binding.destroy();
+      };
+    }
+  }, [userColor, provider]);
+  const saveTextToBackend = async () => {
+    try {
+      const response = await fetch('/api/saveMainText', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ room, text }),
+      });
+      const data = await response.json();
+      console.log('Save response:', data);
+    } catch (error) {
+      console.error('Failed to save text:', error);
     }
   };
 
-  const handleCommentOnClick = () => {
+  // Effect to save text every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      saveTextToBackend();
+    }, 10000); // Save every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [text, room]);
+
+
+
+
+  function handleSelectionChange(range:Range){
+    // If text is selected
+    if (range && range.length > 0){
+
+      // Get range the user selected and store it in state
+      const selection = quill.current!.getEditor().getSelection(); 
+      setSelectedRange(selection);
+
+
+      // Get positions of Editor itself and selected range (in pixels)
+      const bounds = quill.current!.getEditor().getBounds(selection!.index);
+      
+      // Set button position relative to selected text
+      setButtonPosition({top: bounds!.top + 40, left: bounds!.left});
+      
+      setShowButton(true);
+      //console.log(buttonPosition);
+
+    }else{
+      setShowButton(false);
+    }
+  }
+
+  function handleCommentOnClick(){
     setShowButton(false);
     setShowTextarea(true);
+    console.log(buttonPosition);
+    // Get selected text
+    const gettext = quill.current!.getEditor().getText(selectedRange?.index, selectedRange?.length);
 
-    const editorRect = editorRef.current
-      ?.getEditor()
-      .root.getBoundingClientRect();
-    const bounds = quill.current?.getBounds(
-      selectedRange[0] ?? 0,
-      selectedRange[1] ?? 0
-    );
-    setTextareaPosition({
-      top: (editorRect?.top ?? 0) + (bounds?.top ?? 0) - 60,
-      left:
-        (editorRect?.left ?? 0) + (bounds?.left ?? 0) + (bounds?.width ?? 0),
-    });
-  };
+    // Shorten text if too long
+    const threshold = 25;
+    if (gettext.length > threshold){
+      const shortenedText = gettext.substring(0,threshold) + "...";
+      setSelectedText(shortenedText);
+    }else{
+      setSelectedText(gettext);
+    }
 
-  const handleSendOnClick = () => {
-    if (textareaRef.current?.value !== "") {
-      quill.current?.formatText(selectedRange[0] ?? 0, selectedRange[1] ?? 0, {
-        background: "#A9C6E3",
+    const bounds = quill.current!.getEditor().getBounds(selectedRange!.index);
+
+    setTextareaPosition({top: bounds!.top, left: bounds!.left + bounds!.width + 100});
+  }
+
+  function handleCommentChange(event: React.ChangeEvent<HTMLTextAreaElement>){
+    setCommentContent(event.target.value);
+  }
+
+  function handleCloseOnClick(){
+    setShowTextarea(false);
+    setCommentContent("");
+    setSelectedRange(null);
+  }
+
+  function handleSendOnClick(){
+    if(textareaRef.current!.value != ""){
+      
+      // Mark the text
+      quill.current!.getEditor().formatText(selectedRange!.index, selectedRange!.length, {
+        'background': '#ffff66'
       });
 
       const date = new Date().toLocaleDateString();
-      addComment("Name", content, date, 0);
+
+      // Send comment to Editorinterface
+      setTextSpecificComment({key: 0, name: "Name", content: commentContent, date:date, upvotes: 0, isTextSpecific: true, selectedText: selectedText, index: selectedRange!.index, length: selectedRange!.length, history: [], replies: []})
+
       setShowTextarea(false);
-      setContent("");
     }
-  };
+  }
+  
 
-  const handleCloseOnClick = () => {
-    setShowTextarea(false);
-    setSelectedRange([null, null]);
-    setContent("");
-  };
-
-  const handleCommentChange = (event: string) => {
-    setContent(event);
-  };
 
   return (
     <div>
+      <h1>
+        Editor <code>Room #{room}</code>
+      </h1>
       <ReactQuill
-        ref={editorRef}
+        className="quill"
+        ref={quill}
+        modules={{ cursors: true }}
         theme="snow"
-        placeholder="Lorem ipsum dolor sit amet ..."
+        value={text}
+        onChange={setText}
       />
       {showButton && (
-        <Button
-          onClick={handleCommentOnClick}
-          style={{
-            position: "absolute",
-            top: buttonPosition.top,
-            left: buttonPosition.left,
-          }}
-        >
-          Comment
-        </Button>
-      )}
+        <button onClick={handleCommentOnClick} style={{
+              position: 'absolute',
+              top: `${buttonPosition!.top}px`,
+              left: `${buttonPosition!.left}px`,
+              background: "#eee",
+              border: '1px solid #ccc',
+              padding: '4px 13px',
+              borderRadius: "4px",
+              
+            }}>Comment </button>)
+        }
+
       {showTextarea && (
-        <Card
-          css={{
-            position: "absolute",
-            top: textareaPosition.top,
-            left: textareaPosition.left,
-            display: "block",
-          }}
-        >
-          <Card.Body>
-            <p>Name</p>
-            <Textarea
-              onValueChange={handleCommentChange}
-              ref={textareaRef}
-              placeholder="Add new Comment here"
-              fullWidth
-              rows={4}
-            />
-            <Row justify="space-between" align="center">
-              <Button onClick={handleSendOnClick}>Send</Button>
-              <Button onClick={handleCloseOnClick}>Cancel</Button>
-            </Row>
-          </Card.Body>
-        </Card>
+        <div className="newTextComment-card" style={{
+          position: 'absolute',
+          top: `${textareaPosition!.top}px`,
+          left: `${textareaPosition!.left}px`}}>
+
+          <div className="newTextComment-body">
+              <div className='newTextComment-top'>
+                <h5 className='newTextComment-name'>Name</h5>
+                <IconButton onClick={handleCloseOnClick}>
+                  <CloseIcon/>
+                </IconButton>
+              </div>
+              <textarea  className="newTextComment-textarea" onChange={handleCommentChange} ref={textareaRef} placeholder='Add new Comment here'></textarea>
+
+              <button  className='newTextComment-send' onClick={handleSendOnClick}>Send</button>
+              
+              
+            
+          </div>
+        </div>
       )}
     </div>
-  );
-};
 
-export default Editor;
+  );
+}
